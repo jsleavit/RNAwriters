@@ -45,7 +45,7 @@ class COLLECT_GENOME_INFO():
                 for acc in accessions:
                     f.write(acc.strip() + '\n')
 
-        self.downloadNCBIgenomeInfo(tmpAccess, fileName, self.downloadDirectory)
+        #self.downloadNCBIgenomeInfo(tmpAccess, fileName, self.downloadDirectory)
 
 if __name__ == '__main__':
     if len(sys.argv) != 3:
