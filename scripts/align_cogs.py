@@ -23,10 +23,8 @@ class ALIGN_COGS():
         AlignIO.write(alignment, fastaFile.replace('.fasta', '.sto'), 'stockholm')
         print(f'alignment for {cog} written to {fastaFile}')
 
-    def alignCogSequences(self):
+    def alignCogSequences(self): 
         ''' align cog sequences '''
-
-
         for path in self.clustered_fastas:
             cog = path.split('/')[-1].split('.')[0]
             out_file = self.out_path + f'{cog}.aligned.clustered.fasta'
