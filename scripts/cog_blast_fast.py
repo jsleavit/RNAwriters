@@ -127,64 +127,83 @@ class COG_BLAST():
         ''' remove temporary files '''
 
         os.system(f'rm -r {self.out_path_root}test_temp/')
+
+    def collectOutput(self, highConfHitCutoff = 1e-40, eValueCutoff = 1e-3):
+        ''' build a dataframe of all the hits '''
+        hits = pd.DataFrame()
+        uniprot_ids = self.mapUniprot()
+
+        # collect all the hits
+        hmmblast_hits = [x for x in os.listdir(self.out_path_root + 'test_hmm_blast_results/') if x.endswith('.blast.out')]
+
+        for hmmsearch_dir in hmmblast_hits:
+      
+            hmmsearch_dir = hmmsearch_dir.split('/')[-1]
+            hit = pd.read_csv(self.out_path_root + f'test_hmm_blast_results/{hmmsearch_dir}', comment = '#', sep = '\t', header = None).rename(columns = {0: 'query', 1: 'target', 2: 'percent_identity',  10: 'e_value', 11: 'bit_score'})
+        
+            try:
+                hit = hit[hit['e_value'] <= eValueCutoff]
+                hit['target_product'] = hit['target'].apply(lambda x: uniprot_ids[x][1])
+                hits = pd.concat([hits, hit], ignore_index = True)
+            except KeyError:
+                print(f'no hits for {hmmsearch_dir}')
+                continue
+            
+        hits.to_csv(self.out_path_root + 'test_hmm_blast_results/hmm_blast_results.gz', index = False, header = True, sep = '\t', compression = 'gzip')
+    
                     
-    def blastHMMhits(self, highConfHitCutoff = 1e-40, eValueCutoff = 1e-3, numThreads = 45):
+    def blastHMMhits(self, numThreads = 45):
         ''' blast hmmsearch hits against reference fasta '''
 
         blast_db = self.out_path_root + 'blast_db/uniprot_trna_mod_enzymes_references_query_set.fasta'
 
-        hits = pd.DataFrame()
+        hmmsearch_dir_list = [x for x in glob.glob(self.out_path_root + 'hmmsearch_stats/*') if os.path.isdir(x)]
 
-        uniprot_ids = self.mapUniprot()
-
-        # open each directory in hmmsearch_stats and each file in that directory and read in the gene name to blast
-        for hmmsearch_dir in os.listdir(self.out_path_root + 'hmmsearch_stats/'):
-
-            # check if the hmmsearch_dir is a directory
-            if os.path.isdir(self.out_path_root + 'hmmsearch_stats/' + hmmsearch_dir):
-
-                # open each file in hmmsearch_dir
-                for hmmsearch_file in os.listdir(self.out_path_root + 'hmmsearch_stats/' + hmmsearch_dir):
-
-                    with open(self.out_path_root + 'hmmsearch_stats/' + hmmsearch_dir + '/' + hmmsearch_file, 'r') as f:
-                        for line in f:
-                            cog = hmmsearch_file.split('.')[3]
-
-                            # clean up the line
-                            gene, e_val, product, phylum, family, species = [str(x).strip() for x in line.split('\t')[3:]]
-
-                            # make a temporary directory for blasting
-                            if self.makeDirectory(self.out_path_root + 'test_temp/'):
-                                pass
-                            else:
-                                self.makeDirectory(self.out_path_root + 'test_temp/')
-                            
-                            # get all the protein sequences from the each cog in the hmmsearch_dir
-                            with open(self.out_path_root + f'test_temp/{hmmsearch_dir}.fasta', 'a') as big_fasta_out:
-                                FA = FastAreader(self.genome_dir + hmmsearch_dir + '/protein.faa')
-                                for head, seq in FA.readFasta():
-                                    if gene in head.split()[0]:
-                                        gene_id = head.split()[0]
-                                        annotated_product = '_'.join(head.split()[1:])
-                                        gene_with_out_spaces = '_'.join(head.split())
-                                        big_fasta_out.write('>{}|{}|{}|{}|{}|{}\n{}\n'.format(gene,cog,e_val,hmmsearch_dir,phylum,annotated_product,seq))
-                            query_path = self.out_path_root + f'test_temp/{hmmsearch_dir}.fasta'
-
-                # blast gene against reference fasta
-                os.system(f'blastp -query {query_path} -db {blast_db} -num_threads {numThreads} -outfmt 6 -out {self.out_path_root}test_hmm_blast_results/{hmmsearch_dir}.blast.out')
+        # open each directory in hmmsearch_stats and each file in that directory and read in the gene name to blast   
+        for hmmsearch_dir in hmmsearch_dir_list:
+            hmmsearch_dir = hmmsearch_dir.split('/')[-1]
+        
+ 
+            if not os.path.exists(self.out_path_root + f'test_hmm_blast_results/{hmmsearch_dir}.blast.out'):
                 
-                # remove the temporary directory
-                self.removeTempFiles()
+                # check if the hmmsearch_dir is a directory
+                if os.path.isdir(self.out_path_root + 'hmmsearch_stats/' + hmmsearch_dir):
 
-                # build the blast results database
-                gene_hits = pd.read_csv(self.out_path_root + f'test_hmm_blast_results/{hmmsearch_dir}.blast.out', comment = '#', sep = '\t', header = None).rename(columns = {0: 'query', 1: 'target', 2: 'percent_identity',  10: 'e_value', 11: 'bit_score'})
-                gene_hits = gene_hits[gene_hits['e_value'] <= eValueCutoff]
-                gene_hits['target_product'] = gene_hits['target'].apply(lambda x: uniprot_ids[x][1])
-                hits = pd.concat([hits, gene_hits], ignore_index = True)
+                    # open each file in hmmsearch_dir
+                    for hmmsearch_file in os.listdir(self.out_path_root + 'hmmsearch_stats/' + hmmsearch_dir):
 
-        # write out the blast results
-        hits.to_csv(self.out_path_root + 'test_hmm_blast_results/hmm_blast_results.gz', index = False, header = True, sep = '\t', compression = 'gzip')
-    
+                        with open(self.out_path_root + 'hmmsearch_stats/' + hmmsearch_dir + '/' + hmmsearch_file, 'r') as f:
+                            for line in f:
+                                cog = hmmsearch_file.split('.')[3]
+
+                                # clean up the line
+                                gene, e_val, product, phylum, family, species = [str(x).strip() for x in line.split('\t')[3:]]
+
+                                # make a temporary directory for blasting
+                                if self.makeDirectory(self.out_path_root + 'test_temp/'):
+                                    pass
+                                else:
+                                    self.makeDirectory(self.out_path_root + 'test_temp/')
+                                
+                                # get all the protein sequences from the each cog in the hmmsearch_dir
+                                with open(self.out_path_root + f'test_temp/{hmmsearch_dir}.fasta', 'a') as big_fasta_out:
+                                    FA = FastAreader(self.genome_dir + hmmsearch_dir + '/protein.faa')
+                                    for head, seq in FA.readFasta():
+                                        if gene in head.split()[0]:
+                                            annotated_product = '_'.join(head.split()[1:])
+                                            big_fasta_out.write('>{}|{}|{}|{}|{}|{}\n{}\n'.format(gene,cog,e_val,hmmsearch_dir,phylum,annotated_product,seq))
+                                query_path = self.out_path_root + f'test_temp/{hmmsearch_dir}.fasta'
+
+                    # blast gene against reference fasta
+                    os.system(f'blastp -query {query_path} -db {blast_db} -num_threads {numThreads} -outfmt 6 -out {self.out_path_root}test_hmm_blast_results/{hmmsearch_dir}.blast.out')
+                    
+                    # remove the temporary directory
+                    self.removeTempFiles()
+
+            # if the output file already exists, skip it
+            else:
+                continue
+
 if __name__ == '__main__':
     COG_BLAST().blastHMMhits()
-   
+    COG_BLAST().collectOutput()
