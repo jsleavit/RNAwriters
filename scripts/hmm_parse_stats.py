@@ -2,12 +2,21 @@
 
 import os, sys
 import glob
+import gzip
 import pandas as pd
 
 ## HMM PARSE STATS
 ############################################################################################################
 import pandas as pd
 class HMM_PARSE():
+    ''' 
+    Parses the hmmsearch results and writes hits for a COG to a file in a genome directory
+     
+    Ran after running hmm_cogs.py
+      
+        
+    '''
+
     def __init__(self, hmmsearchResultsList = [],
                     outPath = '/projects/lowelab/users/jsleavit/git_repos/data/COG_ftp_files/',
                     overwrite = False):
@@ -62,7 +71,7 @@ class HMM_PARSE():
         
         print([f'{domain}: {domain_counts[domain]} ({round(domain_counts[domain]/gtRNAdb_counts[domain]*100, 2)}%)' for domain in domain_counts.keys() if domain in gtRNAdb_counts.keys()])
         
-    def parseHMMsearch(self):
+    def parseHMMsearch(self, verbose = True):
         ''' parse hmmsearch results '''
 
         if os.path.exists(self.out_path_root + 'hmmsearch_stats/hmmsearch_paths.txt') and not self.overwrite:
@@ -71,7 +80,6 @@ class HMM_PARSE():
             self.buildResultPath()
 
         # parse hmmsearch results
-    
         for hmmsearch_result in open(self.out_path_root + 'hmmsearch_stats/hmmsearch_paths.txt', 'r'):
             genome = hmmsearch_result.split('/')[-1].split('.hmmsearch.out')[0]
             phylum = self.genomeInfo.loc[self.genomeInfo['Gb_asm_acc'] == genome, 'phylum'].values[0]
@@ -96,24 +104,37 @@ class HMM_PARSE():
                         product = line.split()[-1]
                         cog_genes[cog] = cog_genes.get(cog, []) + [(gene, e_val, product)]
                 
-            
-            for cog in cog_genes.keys():
-                cog_gene_count = len(cog_genes[cog])
-                out_file = self.out_path_root + f'hmmsearch_stats/{genome}/{genome}.{str(cog_gene_count)}.{cog}.hmmsearch.out'
-                if os.path.exists(out_file) and not self.overwrite:
-                    print(f'hmmsearch file {out_file} exists')
-                    pass
-                else:
-                    with open(out_file, 'w') as f:
+            if verbose:
+                for cog in cog_genes.keys():
+                    cog_gene_count = len(cog_genes[cog])
+                    out_file = self.out_path_root + f'hmmsearch_stats/{genome}/{genome}.{str(cog_gene_count)}.{cog}.hmmsearch.out'
+                    if os.path.exists(out_file) and not self.overwrite:
+                        print(f'hmmsearch file {out_file} exists')
+                        pass
+                    else:
+                        with open(out_file, 'w') as f:
+                            for gene, e_val, product in cog_genes[cog]:
+                                to_write = [str(x).strip() for x in [genome, cog, cog_gene_count, gene, e_val, product, phylum, family, species]]
+                                f.write('\t'.join(to_write) + '\n')
+                            #f.write(f'{genome}\t{cog}\t{gene}\t{e_val}\t{product}\t{phylum}\t{family}\t{species}\n')
+                            #f.write(f'{family}{species}\t{cog}{gene}\t{e_val}\t{product}\n')
+            else:
+                # write all results to one large commpressed file
+                with gzip.open(self.out_path_root + 'hmmsearch_stats/hmmsearch_results.tsv.gz', 'at') as f:
+                    for cog in cog_genes.keys():
+                        cog_gene_count = len(cog_genes[cog])
                         for gene, e_val, product in cog_genes[cog]:
                             to_write = [str(x).strip() for x in [genome, cog, cog_gene_count, gene, e_val, product, phylum, family, species]]
                             f.write('\t'.join(to_write) + '\n')
-                            #f.write(f'{genome}\t{cog}\t{gene}\t{e_val}\t{product}\t{phylum}\t{family}\t{species}\n')
-                            #f.write(f'{family}{species}\t{cog}{gene}\t{e_val}\t{product}\n')
+                        #f.write(f'{genome}\t{cog}\t{cog_gene_count}\t{gene}\t{e_val}\t{product}\t{phylum}\t{family}\t{species}\n')
+                        #f.write(f'{family}{species}\t{cog}{gene}\t{e_val}\t{product}\n')
+                    
+
 if __name__ == '__main__':
 
     # move hmmsearch results
     #hmmsearch_results = glob.glob('/projects/lowelab/users/jsleavit/git_repos/data/COG_ftp_files/hmmsearch_genomes/*.out')
     #HMM_STATS(hmmsearchResultsList = hmmsearch_results).checkAssemblies()
     #HMM_PARSE().checkAssemblies()
-    HMM_PARSE().parseHMMsearch()
+    #HMM_PARSE().parseHMMsearch(verbose = True)
+    HMM_PARSE().parseHMMsearch(verbose = False)

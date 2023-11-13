@@ -79,8 +79,7 @@ class HMM_COGS():
                 pass
             else:
                 os.system(f'hmmsearch --tblout {out_file} --cpu {self.threads} {hmm_db} {assembly} > {out_file.replace(".out", ".log")}')
-            
-    
+                
 if __name__ == '__main__':
     # aligned COGs
     #alignedFastasList = [x for x in glob.glob('/projects/lowelab/users/jsleavit/git_repos/data/COG_ftp_files/aligned_fastas/*.sto') if 'sto' in x]
